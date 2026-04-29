@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HiveMQ Subscriber Dashboard</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0b0f1a;
+            --card-bg: #161c2d;
+            --border-color: #2d3748;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-primary);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            margin: 0;
+            padding: 40px;
+        }
+
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 24px;
+        }
+
+        /* Sidebar Connection Card */
+        .sidebar-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            height: fit-content;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 20px;
+            margin-bottom: 20px;
+            background: #2d3748;
+            color: var(--text-secondary);
+        }
+
+        .status-badge.connected {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-green);
+        }
+
+        h2 { font-size: 1.25rem; margin-bottom: 20px; color: var(--text-primary); }
+
+        .form-group { margin-bottom: 16px; }
+        label { display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px; }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            background: #0b0f1a;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: white;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        input:focus { outline: none; border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .btn-primary { background: var(--accent-blue); color: white; margin-top: 10px; }
+        .btn-outline { background: transparent; border: 1px solid var(--accent-blue); color: var(--accent-blue); margin-top: 10px; }
+        .btn:active { transform: scale(0.98); }
+
+        /* Main Content Feed */
+        .feed-container {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            max-height: 800px;
+        }
+
+        .feed-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .message-list {
+            padding: 24px;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+
+        .message-card {
+            background: #1e293b;
+            border-left: 4px solid var(--accent-blue);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .msg-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .msg-topic { font-weight: 700; color: var(--accent-blue); }
+        .msg-payload { font-family: 'Courier New', monospace; background: #0f172a; padding: 10px; border-radius: 4px; display: block; overflow-x: auto; }
+
+    </style>
+</head>
+<body>
+
+<div class="dashboard-container">
+    <div class="sidebar-card">
+        <div id="connectionStatus" class="status-badge">● Disconnected</div>
+        <h2>Broker Settings</h2>
+        
+        <div class="form-group">
+            <label>HiveMQ Cluster URL</label>
+            <input type="text" id="host" placeholder="your-id.s1.eu.hivemq.cloud">
+        </div>
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="user">
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="pass">
+        </div>
+        <button class="btn btn-primary" onclick="connectMQTT()">Connect Subscriber</button>
+
+        <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 24px 0;">
+
+        <h2>Topic Subscription</h2>
+        <div class="form-group">
+            <label>Subscribe to Topic</label>
+            <input type="text" id="topic" value="sensors/#">
+        </div>
+        <button class="btn btn-outline" onclick="subscribeTopic()">Update Subscription</button>
+    </div>
+
+    <div class="feed-container">
+        <div class="feed-header">
+            <h2 style="margin: 0;">Live Message Stream</h2>
+            <span style="font-size: 0.8rem; color: var(--text-secondary);" id="messageCount">0 messages received</span>
+        </div>
+        <div class="message-list" id="messageList">
+            <div style="text-align: center; color: var(--text-secondary); margin-top: 40px;">
+                Waiting for connection to stream data...
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let client;
+    let count = 0;
+
+    function connectMQTT() {
+        const host = document.getElementById('host').value;
+        const user = document.getElementById('user').value;
+        const pass = document.getElementById('pass').value;
+        const statusBadge = document.getElementById('connectionStatus');
+
+        const url = `wss://${host}:8884/mqtt`; 
+
+        client = mqtt.connect(url, {
+            username: user,
+            password: pass,
+            clientId: 'web_sub_' + Math.random().toString(16).substr(2, 8)
+        });
+
+        client.on('connect', () => {
+            statusBadge.innerHTML = '● Connected';
+            statusBadge.classList.add('connected');
+            document.getElementById('messageList').innerHTML = ''; // Clear waiting text
+            subscribeTopic();
+        });
+
+        client.on('message', (topic, message) => {
+            renderMessage(topic, message.toString());
+        });
+
+        client.on('error', (err) => {
+            console.error(err);
+            statusBadge.innerHTML = '● Connection Error';
+            statusBadge.classList.remove('connected');
+        });
+    }
+
+    function subscribeTopic() {
+        const topic = document.getElementById('topic').value;
+        if (client && client.connected) {
+            client.subscribe(topic);
+            console.log("Subscribed to: " + topic);
+        }
+    }
+
+    function renderMessage(topic, payload) {
+        count++;
+        document.getElementById('messageCount').innerText = `${count} messages received`;
+        
+        const list = document.getElementById('messageList');
+        const card = document.createElement('div');
+        card.className = 'message-card';
+        
+        card.innerHTML = `
+            <div class="msg-meta">
+                <span class="msg-topic">${topic}</span>
+                <span>${new Date().toLocaleTimeString()}</span>
+            </div>
+            <code class="msg-payload">${payload}</code>
+        `;
+        
+        list.prepend(card);
+        
+        // Keep only last 50 messages to maintain performance
+        if (list.childNodes.length > 50) {
+            list.removeChild(list.lastChild);
+        }
+    }
+</script>
+
+</body>
+</html>
