@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HiveMQ Publisher Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 50%, #16213e 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            animation: slideDown 0.8s ease-out;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #00d4ff, #0099ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 0.95em;
+            color: #888;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-top: 15px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-badge.connected {
+            background-color: rgba(0, 255, 100, 0.2);
+            color: #00ff64;
+            border: 1px solid #00ff64;
+        }
+
+        .status-badge.disconnected {
+            background-color: rgba(255, 50, 50, 0.2);
+            color: #ff3232;
+            border: 1px solid #ff3232;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            animation: fadeIn 0.6s ease-out;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: rgba(0, 212, 255, 0.5);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .card h2 {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            color: #00d4ff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 0.9em;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95em;
+            transition: all 0.3s ease;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #00d4ff;
+            background: rgba(0, 212, 255, 0.1);
+            box-shadow: 0 0 15px rgba(0, 212, 255, 0.2);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-size: 0.9em;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-connect {
+            background: linear-gradient(135deg, #00d4ff, #0099ff);
+            color: #000;
+        }
+
+        .btn-connect:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+
+        .btn-connect:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-publish {
+            background: linear-gradient(135deg, #ff00ff, #ff0099);
+            color: #fff;
+        }
+
+        .btn-publish:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(255, 0, 153, 0.3);
+        }
+
+        .btn-publish:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-disconnect {
+            background: rgba(255, 50, 50, 0.3);
+            color: #ff3232;
+            border: 1px solid #ff3232;
+        }
+
+        .btn-disconnect:hover {
+            background: rgba(255, 50, 50, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .log-container {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 6px;
+            padding: 15px;
+            max-height: 250px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            line-height: 1.5;
+        }
+
+        .log-entry {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+            animation: slideInLeft 0.3s ease-out;
+        }
+
+        .log-entry.success {
+            color: #00ff64;
+        }
+
+        .log-entry.error {
+            color: #ff3232;
+        }
+
+        .log-entry.info {
+            color: #00d4ff;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 212, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 212, 255, 0.3);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 212, 255, 0.5);
+        }
+
+        .qos-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .qos-option {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 6px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .qos-option.active {
+            background: rgba(0, 212, 255, 0.3);
+            border-color: #00d4ff;
+            color: #00d4ff;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            background: rgba(0, 212, 255, 0.1);
+            border-left: 3px solid #00d4ff;
+            padding: 15px;
+            border-radius: 6px;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            color: #00d4ff;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📡 HiveMQ Publisher</h1>
+            <p>Real-time Message Publishing Dashboard</p>
+            <div class="status-badge disconnected" id="statusBadge">Disconnected</div>
+        </div>
+
+        <!-- Connection Card -->
+        <div class="card">
+            <h2>🔌 Connection Settings</h2>
+            <div class="form-group">
+                <label for="brokerUrl">Broker URL (with ws:// or wss://)</label>
+                <input type="text" id="brokerUrl" placeholder="e.g., ws://broker.hivemq.com:8000 or wss://your-broker.com:8883" value="ws://broker.hivemq.com:8000">
+            </div>
+            <div class="form-group">
+                <label for="clientId">Client ID</label>
+                <input type="text" id="clientId" placeholder="unique-client-id" value="publisher-" required>
+            </div>
+            <div class="form-group">
+                <label for="username">Username (Optional)</label>
+                <input type="text" id="username" placeholder="Leave empty if not required">
+            </div>
+            <div class="form-group">
+                <label for="password">Password (Optional)</label>
+                <input type="text" id="password" placeholder="Leave empty if not required">
+            </div>
+            <div class="button-group">
+                <button class="btn-connect" id="connectBtn" onclick="connectToBroker()">Connect</button>
+                <button class="btn-disconnect" id="disconnectBtn" onclick="disconnectFromBroker()" disabled>Disconnect</button>
+            </div>
+        </div>
+
+        <!-- Statistics Card -->
+        <div class="card">
+            <h2>📊 Statistics</h2>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-label">Messages Published</div>
+                    <div class="stat-value" id="messageCount">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Connection Status</div>
+                    <div class="stat-value" id="statusValue">Offline</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Publish Card -->
+        <div class="card">
+            <h2>📢 Publish Message</h2>
+            <div class="form-group">
+                <label for="topic">Topic</label>
+                <input type="text" id="topic" placeholder="e.g., home/living-room/temperature" required>
+            </div>
+            <div class="form-group">
+                <label>QoS Level</label>
+                <div class="qos-selector">
+                    <div class="qos-option active" onclick="setQoS(0)">QoS 0 (Fire)</div>
+                    <div class="qos-option" onclick="setQoS(1)">QoS 1 (Ack)</div>
+                    <div class="qos-option" onclick="setQoS(2)">QoS 2 (Sure)</div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="message">Message Payload</label>
+                <textarea id="message" placeholder='{"temperature": 22.5, "humidity": 45}' required></textarea>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="retain" style="width: auto; margin-right: 8px;">
+                    <span style="color: #aaa;">Retain Message</span>
+                </label>
+            </div>
+            <div class="button-group">
+                <button class="btn-publish" id="publishBtn" onclick="publishMessage()" disabled>Publish Message</button>
+            </div>
+        </div>
+
+        <!-- Log Card -->
+        <div class="card">
+            <h2>📋 Event Log</h2>
+            <div class="log-container" id="logContainer">
+                <div class="log-entry info">System ready. Configure connection and click "Connect".</div>
+            </div>
+            <button style="width: 100%; margin-top: 10px; background: rgba(0, 212, 255, 0.2); color: #00d4ff; border: 1px solid #00d4ff;" onclick="clearLogs()">Clear Logs</button>
+        </div>
+    </div>
+
+    <script>
+        let client = null;
+        let isConnected = false;
+        let messageCount = 0;
+        let selectedQoS = 0;
+
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logContainer').innerHTML = '';
+        }
+
+        function updateStatus() {
+            const statusBadge = document.getElementById('statusBadge');
+            const statusValue = document.getElementById('statusValue');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            const publishBtn = document.getElementById('publishBtn');
+
+            if (isConnected) {
+                statusBadge.className = 'status-badge connected';
+                statusBadge.textContent = 'Connected';
+                statusValue.textContent = 'Online';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                publishBtn.disabled = false;
+            } else {
+                statusBadge.className = 'status-badge disconnected';
+                statusBadge.textContent = 'Disconnected';
+                statusValue.textContent = 'Offline';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                publishBtn.disabled = true;
+            }
+        }
+
+        function setQoS(level) {
+            selectedQoS = level;
+            document.querySelectorAll('.qos-option').forEach(option => {
+                option.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        function connectToBroker() {
+            const brokerUrl = document.getElementById('brokerUrl').value;
+            const clientId = document.getElementById('clientId').value + Math.random().toString(36).substring(7);
+            const username = document.getElementById('username').value || undefined;
+            const password = document.getElementById('password').value || undefined;
+
+            if (!brokerUrl) {
+                log('Please enter a broker URL', 'error');
+                return;
+            }
+
+            log(`Connecting to ${brokerUrl}...`, 'info');
+
+            client = new Paho.MQTT.Client(brokerUrl, clientId);
+            client.onConnectionLost = onConnectionLost;
+            client.onMessageArrived = onMessageArrived;
+
+            const connectOptions = {
+                onSuccess: onConnect,
+                onFailure: onConnectFailure,
+                useSSL: brokerUrl.startsWith('wss'),
+                userName: username,
+                password: password,
+                cleanSession: true
+            };
+
+            client.connect(connectOptions);
+        }
+
+        function onConnect() {
+            isConnected = true;
+            log('✓ Connected to broker successfully', 'success');
+            updateStatus();
+        }
+
+        function onConnectFailure(error) {
+            isConnected = false;
+            log(`✗ Connection failed: ${error.errorMessage}`, 'error');
+            updateStatus();
+        }
+
+        function onConnectionLost(response) {
+            isConnected = false;
+            log('✗ Connection lost: ' + response.errorMessage, 'error');
+            updateStatus();
+        }
+
+        function onMessageArrived(message) {
+            log(`Message arrived on ${message.destinationName}: ${message.payloadString}`, 'info');
+        }
+
+        function publishMessage() {
+            const topic = document.getElementById('topic').value;
+            const message = document.getElementById('message').value;
+            const retain = document.getElementById('retain').checked;
+
+            if (!topic || !message) {
+                log('Topic and message are required', 'error');
+                return;
+            }
+
+            if (!isConnected) {
+                log('Not connected to broker', 'error');
+                return;
+            }
+
+            try {
+                const mqttMessage = new Paho.MQTT.Message(message);
+                mqttMessage.destinationName = topic;
+                mqttMessage.qos = selectedQoS;
+                mqttMessage.retained = retain;
+                client.send(mqttMessage);
+
+                messageCount++;
+                document.getElementById('messageCount').textContent = messageCount;
+                log(`✓ Published to "${topic}" (QoS ${selectedQoS}${retain ? ', Retained' : ''})`, 'success');
+            } catch (error) {
+                log(`✗ Publish failed: ${error.message}`, 'error');
+            }
+        }
+
+        function disconnectFromBroker() {
+            if (client) {
+                client.disconnect();
+                isConnected = false;
+                log('✓ Disconnected from broker', 'success');
+                updateStatus();
+            }
+        }
+
+        // Initialize
+        updateStatus();
+        document.getElementById('clientId').value += Math.random().toString(36).substring(7);
+        log('Dashboard initialized. Ready to connect.', 'info');
+    </script>
+</body>
+</html>
